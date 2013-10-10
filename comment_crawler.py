@@ -49,6 +49,7 @@ class CommentCrawler(object):
         
         self.topic_info_path = topic_info_path
         self.comment_info_path = comment_info_path
+        self.base_path = 'data/'
         
         # 已经访问的页面: Group id ==> True or False
         self.visited_href = set()
@@ -208,8 +209,8 @@ class CommentCrawler(object):
             # 判断抓取是否结束，如果结束，则释放dict内存
             # 这个很重要，因为随着topic数量增多，内存会占很多
             if topic.isComplete():
-                #self.save_thread.putTask(self._saveTopicHandler, topic_dict, topic_id)
-                self.topic_dict[topic_id] = None        # 释放资源
+                self.save_thread.putTask(self._saveTopicHandler, self.topic_dict, topic_id)
+                #self.topic_dict[topic_id] = None        # 释放资源
                 self.finished.add(topic_id)
                 log.info('Topic: %s 抓取结束。' % topic_id)
                 
@@ -249,7 +250,7 @@ class CommentCrawler(object):
             
         # 保证已经写入到磁盘上，这样可以随时终止
         self.topic_info_file.flush()
-        os.fsync(self.topic_info_file)
+        os.fsync(self.topic_info_file) # The method fsync() forces write of file with file descriptor fd to disk
         
         self.comment_info_file.flush()
         os.fsync(self.comment_info_file)
@@ -261,8 +262,20 @@ class CommentCrawler(object):
         @topic_id 需要存储的topic id
         """
         topic = topic_dict[topic_id]
-        topic_path = self.base_path + '/' + topic_id + '-content.txt'
-        comment_path = self.base_path + '/' + topic_id + '-comment.txt'
+        topic_path = self.base_path + group_id + '/' + topic_id + '-content.txt'
+        comment_path = self.base_path + group_id + '/' + topic_id + '-comment.txt'
+        # 存储topic本身的信息
+        f = codecs.open(topic_path, 'w', 'utf-8')
+        s = topic.getSimpleString('[=]')
+        f.write(s)
+        f.close()
+        
+        # 存储comment信息
+        f = codecs.open(comment_path, 'w', 'utf-8')
+        for comment in topic.comment_list:
+            s = comment.getSimpleString('[=]')
+            f.write(s + '\n[*ROWEND*]\n')
+        f.close()
         
         self.topic_dict[topic_id] = None        # 释放资源
         log.info("Topic: %s 存储结束" % topic_id)
