@@ -97,7 +97,7 @@ class Topic(object):
         s += u"小组 id: " + self.group_id + LINE_FEED
         s += u"楼主 id: " + self.user_id + u" 名号: " + self.user_name + LINE_FEED
         s += u"发表时间: " + str(self.pubdate) + LINE_FEED
-        s += u"链接：" + self._getLink() + LINE_FEED
+        s += u"链接：" + self.getSelfLink() + LINE_FEED
         s += u"标题: " + self.title + LINE_FEED
         #s += u"Max number of comment page: " + str(self.max_comment_page) + LINE_FEED
         s += u"帖子内容: " + LINE_FEED + self.content + LINE_FEED + LINE_FEED
@@ -126,7 +126,7 @@ class Topic(object):
         
         return s
         
-    def _getLink(self):
+    def getSelfLink(self):
         """ 获取自身的链接
         """
         url = u"http://www.douban.com/group/topic/" + self.topic_id + "/"
@@ -139,9 +139,9 @@ class Topic(object):
         返回新添加的comment list
         """
         if isFirstPage:
-            return self.extract_first_page(webPage)
+            return self.extractFirstPage(webPage)
         else:
-            return self.extract_nonfirst_page(webPage)
+            return self.extractNonfirstPage(webPage)
             
     def isComplete(self):
         """ 判断评论抓取是否结束
@@ -154,7 +154,7 @@ class Topic(object):
         else:
             return True
         
-    def extract_first_page(self, webPage):
+    def extractFirstPage(self, webPage):
         """ 抽取topic首页的topic内容和评论
         返回新添加的comment list
         """
@@ -219,7 +219,7 @@ class Topic(object):
         # Note: 有可能一个topic下没有评论信息
         newly_added = [] # 本页中新添加的comment
         for cli in comments_li:
-            comment = self.extract_comment(cli)
+            comment = self.extractComment(cli)
             # 为commen_list加锁
             #pdb.set_trace()
             if comment is None:
@@ -231,19 +231,20 @@ class Topic(object):
             
         # 在添加评论后对评论按照日期排序
         sorted(self.comment_list, key=operator.attrgetter('pubdate'), reverse = True)
+
         # 添加已经抓取的page index
         self.parsedPageIndexSet.add(1)
         
         return newly_added
         
-    def extract_comment(self, cli):
+    def extractComment(self, cli):
         # 从comment节点中抽取出Comment结构，并返回Comment对象
         #pdb.set_trace()
         cid = cli.attrib['data-cid']
         nodea = cli.xpath("div[@class='reply-doc content']/div[@class='bg-img-green']/h4/a")[0]
         #  如果是已注销的用于，则user_name = '[已注销]'
         user_name = nodea.text
-        user_id = self.extract_user_id(nodea.attrib['href'])
+        user_id = self.extractUserID(nodea.attrib['href'])
         pnode = cli.xpath("div[@class='reply-doc content']/p")[0]
         content = unicode(etree.tostring(pnode, method='text', encoding='utf-8')).strip()
         # 发布时间
@@ -259,47 +260,52 @@ class Topic(object):
             quote_content_all = quote_content_node.text.strip()
             url_node = quote_node[0].xpath("span[@class='pubdate']/a")[0]
             url = url_node.attrib['href']
-            quote_user_id = self.extract_user_id(url)
+            quote_user_id = self.extractUserID(url)
             # 找到引用的回复的comment
-            quote_comment = self.find_previous_comment(quote_content_all, quote_user_id)
+            quote_comment = self.findPreviousComment(quote_content_all, quote_user_id)
             if quote_comment is None:
-                log.error('Quote comment not found for comment: %s in topic: %s, in group: %s' % (cid, self.topic_id, self.group_id))
+                log.error('Quote comment not found for comment: %s in topic: %s, \
+                    in group: \%s' % (cid, self.topic_id, self.group_id))
+                log.error('Quote content: %s' % quote_content_all)
+                log.error('Comment content: %s\n\n' % content)
                 
         comment = Comment(cid, user_id, pubdate, content, quote_comment, self.topic_id, self.group_id)
         #print "Comment content: ", comment.content
         return comment
         
-    def extract_user_id(self, url):
+    def extractUserID(self, url):
         # 从用户链接中抽取出用户id
         match_obj = REPeople.match(url)
         if match_obj is None:
             pdb.set_trace()
         return match_obj.group(1)
         
-    def find_previous_comment(self, content, user_id):
+    def findPreviousComment(self, content, user_id):
         # 根据引用的内容和user id，找到引用的评论的链接
         # 比较内容时，不考虑其中的换行符
-        content = content.replace("\n", "")
+        import re
+        content = re.sub(r'\s', '', content) # remove any white spaces
         for comment in self.comment_list:
-            tmp = comment.content.replace("\n", "")
+            tmp = re.sub(r'\s', '', comment.content)
             if content == tmp and user_id == comment.user_id:
                 return comment
                 
         # not found, but should be found
         return None
-    def extract_nonfirst_page(self, webPage):
+    def extractNonfirstPage(self, webPage):
         # 抽取topic非首页的内容
         # 如果第一页的评论数不足100，则不可能有第二页评论
         url, pageSource = webPage.getDatas() # pageSource已经为unicode格式  
         if len(self.comment_list) < 100:
-            log.warning("Warning(might be an error) in extracting comments. Link: %s, Group id: %s, Topic id: %s." % (url, self.group_id, self.topic_id))
+            log.warning("It seems there are not engough(100) comments in the first page: \
+                Link: %s, Group id: %s, Topic id: %s." % (url, self.group_id, self.topic_id))
         
         page = etree.HTML(pageSource)
         comments_li = page.xpath(u"//ul[@id='comments']/li")
         # Note: 有可能一个topic下没有评论信息
         newly_added = [] # 本页中新添加的comment
         for cli in comments_li:
-            comment = self.extract_comment(cli)
+            comment = self.extractComment(cli)
             # 为commen_list加锁
             self.lock.acquire()
             self.comment_list.append(comment)
@@ -313,6 +319,7 @@ class Topic(object):
         start = int(match_obj.group(2))
         if start % 100 != 0:
             log.info('链接格式错误：%s' % url)
+            
         self.parsedPageIndexSet.add(start / 100 + 1)
         return newly_added
         
@@ -323,7 +330,7 @@ class Group(object):
     """
     def __init__(self, group_id):
         self.group_id = group_id            # 小组的id
-        self.user_id = u""              # 创建小组的user id
+        self.admin = u""              # 创建小组的user id
         self.pubdate = ""               # 小组创建的时间
         self.desc = u""                 # 小组的介绍
         
@@ -334,7 +341,7 @@ class Group(object):
         """ String representation for class Group
         """
         s = u"小组id: " + self.group_id + "\n"
-        s += u"创建者id: " + self.user_id + "\n"
+        s += u"创建者id: " + self.admin + "\n"
         s += u"创建日期: " + str(self.pubdate) + "\n"
         s += u"小组描述: " + self.desc + "\n"
         
@@ -353,7 +360,7 @@ class Group(object):
         """
         s = u''
         s += (self.group_id + delimiter)
-        s += (self.user_id + delimiter)
+        s += (self.admin + delimiter)
         s += (str(self.pubdate) + delimiter)
         s += (self.desc + delimiter)
         s += ','.join(self.stick_topic_list)
@@ -370,21 +377,21 @@ class Group(object):
         # 抽取小组信息
         page = etree.HTML(pageSource.decode('utf-8'))
         self.title = page.xpath("/html/head/title")[0].text.strip()
-        infobox = page.xpath("//div[@id='wrapper']//div[@class='infobox']")[0]
-        url = infobox.xpath("div[@class='bd']/p/a")[0].attrib['href']
-        self.user_id = REPeople.match(url).group(1).strip()
+        board = page.xpath("//div[@id='wrapper']//div[@class='group-board']")[0]
+        url = board.xpath("p/a")[0].attrib['href']
+        self.admin = REPeople.match(url).group(1).strip()
         
-        pnode = infobox.xpath("div[@class='bd']/p")[0]
+        pnode = board.xpath("p")[0]
         strtime = RETime.search(pnode.text).group(0)
         self.pubdate = datetime.strptime(strtime, "%Y-%m-%d")
         
-        bdnode = infobox.xpath("div[@class='bd']")[0]
+        bdnode = board.xpath("div[@class='group-intro']")[0]
         self.desc = etree.tostring(bdnode, method='text', encoding='utf-8').strip()
         self.desc = self.desc.decode('utf-8').strip()
         
-        self.extract_stick_topic(webPage)
+        self.extractSticTopic(webPage)
         
-    def extract_stick_topic(self, webPage):
+    def extractSticTopic(self, webPage):
         """ 抓取小组的置顶topic id列表
         """
         url, pageSource = webPage.getDatas()
@@ -393,7 +400,7 @@ class Group(object):
             page = etree.HTML(pageSource.decode('utf-8'))
         else:
             page = etree.HTML(pageSource)
-        stickimg = page.xpath(u"//div[@id='wrapper']//div[@class='article']//img[@alt='[置顶]']")
+        stickimg = page.xpath(u"div[@class='group-topics']//img[@alt='[置顶]']")
         # 可能一个小组中没有置顶贴，此时stickmig为空
         for imgnode in stickimg:
             titlenode = imgnode.getparent().getparent()

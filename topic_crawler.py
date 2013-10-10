@@ -33,28 +33,31 @@ log = logging.getLogger('Main.TopicCrawler')
 
 class TopicCrawler(object):
 
-    def __init__(self, group_id, threadNum, group_info_path, topic_list_path, max_topics_num = 1000):
+    def __init__(self, group_id, thread_num, group_info_path, topic_list_path, max_topics_num = 1000):
         """
-        `group_info_path` 存储group本身的信息
-        `topic_list_path` 保存所有的topic id的list
+        `group_id`          待抓取的group id
+        `thread_num`         抓取的线程
+        `group_info_path`   存储group本身的信息文件路径
+        `topic_list_path`   保存所有的topic id list的文件路径
         """
         #线程池,指定线程数
-        self.threadPool = ThreadPool(threadNum)
+        self.thread_pool = ThreadPool(thread_num)
+        # 保存topic的线程
+        self.save_thread = ThreadPool(1)
+
         # 写数据库的线程
         #self.DBThread = ThreadPool(1)
-        # 保存topic的线程
-        self.saveThread = ThreadPool(1)
-        
+                
         # 保存group相关信息
         self.group_info_path = group_info_path
         self.topic_list_path = topic_list_path
         
         # 已经访问的页面: Group id ==> True or False
-        self.visitedHref = set()
+        self.visited_href = set()
         #待访问的小组讨论页面
-        self.unvisitedHref = deque()
+        self.unvisited_href = deque()
         # 访问失败的页面链接
-        self.failedHref = set()
+        self.failed_href = set()
         
         self.lock = Lock() #线程锁
         
@@ -63,11 +66,11 @@ class TopicCrawler(object):
         
         # 抓取结束有两种可能：1）抓取到的topic数目已经最大；2）已经将所有的topic全部抓取
         # 只保存topic id
-        self.topicList = list()
+        self.topic_list = list()
 
-        self.isCrawling = False
+        self.is_crawling = False
         
-        self.database =  Database("DoubanGroup.db")
+        # self.database =  Database("DoubanGroup.db")
         
         # 每个Group抓取的最大topic个数
         self.MAX_TOPICS_NUM = max_topics_num
@@ -77,9 +80,9 @@ class TopicCrawler(object):
 
     def start(self):
         print '\nStart Crawling topic list...\n'
-        self.isCrawling = True
-        self.threadPool.startThreads()
-        self.saveThread.startThreads()
+        self.is_crawling = True
+        self.thread_pool.startThreads()
+        self.save_thread.startThreads()
         
         # 打开需要存储的文件
         self.group_info_file = codecs.open(self.group_info_path, 'w', 'utf-8')
@@ -87,21 +90,22 @@ class TopicCrawler(object):
         
         url = "http://www.douban.com/group/" + group_id + "/"
         print "Add start url:", url
-        self.unvisitedHref.append(url)
+        self.unvisited_href.append(url)
         url = "http://www.douban.com/group/" + group_id + "/discussion?start=0"
         print "Add start urls:", url
-        self.unvisitedHref.append(url)
+        self.unvisited_href.append(url)
+        
         #分配任务,线程池并发下载当前深度的所有页面（该操作不阻塞）
         self._assignInitTask()
         #等待当前线程池完成所有任务,当池内的所有任务完成时，才进行下一个小组的抓取
-        #self.threadPool.taskJoin()可代替以下操作，可无法Ctrl-C Interupt
-        while self.threadPool.getTaskLeft() > 0:
-            #print "Task left: ", self.threadPool.getTaskLeft()
+        #self.thread_pool.taskJoin()可代替以下操作，可无法Ctrl-C Interupt
+        while self.thread_pool.getTaskLeft() > 0:
+            #print "Task left: ", self.thread_pool.getTaskLeft()
             time.sleep(3)
-        # 存储抓取的结果
-        # 等待存储县城结束
-        while self.saveThread.getTaskLeft() > 0:
-            print 'Wairting for saving thread. Taks left: %d' % self.saveThread.getTaskLeft()
+
+        # 存储抓取的结果并等待存储线程结束
+        while self.save_thread.getTaskLeft() > 0:
+            print 'Wairting for saving thread. Taks left: %d' % self.save_thread.getTaskLeft()
             time.sleep(3)
             
         print "Stroring crawling topic list for: " + group_id
@@ -112,90 +116,32 @@ class TopicCrawler(object):
         log.info("Topic list crawling done with group %s.", group_id)
         
         self.stop()
-        assert(self.threadPool.getTaskLeft() == 0)
+        assert(self.thread_pool.getTaskLeft() == 0)
+        
+        # 关闭文件
         self.group_info_file.close()
         self.topic_list_file.close()
         
         print "Main Crawling procedure finished!"
 
     def stop(self):
-        self.isCrawling = False
-        self.threadPool.stopThreads()
-        self.saveThread.stopThreads()
-        
-    def _saveTopicList(self):
-        """将抽取的结果存储在文件中
-        Note: 这次是将存储过程放在主线程，将会阻塞抓取过程
-        """
-        group_id = self.group_id
-        this_group = self.group_info
-        print "For group %s: number of Stick post: %d, number of regurlar post: %d, total topics is: %d." % \
-            (group_id, len(this_group.stick_topic_list), len(self.topicList), len(this_group.stick_topic_list)+len(self.topicList))
-            
-        # 将访问失败的网页存储起来
-        log.info('抓取失败的网页：')
-        for href in self.failedHref:
-            log.info(href)
-        
-        # 保存Group的本身的信息
-        f = open(group_info_path, "w")
-        f.write(this_group.__repr__())
-        f.close()
-        
-        # 存储Topic相关信息
-        f = open(topic_list_path, 'w')
-        for tid in this_group.stick_topic_list:
-            f.write(tid + "\n")
-            
-        f.write("\n")
-        for tid in self.topicList:
-            f.write(tid + "\n")
-            
-        f.close()
-        
-        self.topicList = list()
-        self.failedHref = set()
-        
-    def _save_topic_handler(self, topic_list):
-        """ 将每次从页面中抓取的topic id随时保存到文件中
-        """
-        for tid in topic_list:
-            self.topic_list_file.write(tid + '\n')
-        self.topic_list_file.flush()
-        os.fsync(self.topic_list_file)
-        
-    def _save_group_handler(self, group):
-        """ 保存group的基本信息，比如简介，创建日期等
-        `group` models.Group
-        """
-        print 'In saving thread'
-        # 写入group的基本信息和置顶贴id
-        self.group_info_file.write(group.getSimpleString('[=]'))
-        self.group_info_file.flush()
-        os.fsync(self.group_info_file)
-        
-    def getAlreadyVisitedNum(self):
-        #visitedGroups保存已经分配给taskQueue的链接，有可能链接还在处理中。
-        #因此真实的已访问链接数为visitedGroups数减去待访问的链接数
-        if len(self.visitedHref) == 0:
-            return 0
-        else:
-            return len(self.visitedHref) - self.threadPool.getTaskLeft()
+        self.is_crawling = False
+        self.thread_pool.stopThreads()
+        self.save_thread.stopThreads()
 
     def _assignInitTask(self):
         """取出一个线程，并为这个线程分配任务，即抓取网页
         """ 
-        while len(self.unvisitedHref) > 0:
+        while len(self.unvisited_href) > 0:
             # 从未访问的列表中抽出一个任务，并为其分配thread
-            url = self.unvisitedHref.popleft()
-            self.threadPool.putTask(self._taskHandler, url)
+            url = self.unvisited_href.popleft()
+            self.thread_pool.putTask(self._taskHandler, url)
             # 添加已经访问过的小组id
-            self.visitedHref.add(url)
+            self.visited_href.add(url)
             
     def _taskHandler(self, url):
         """ 根据指定的url，抓取网页，并进行相应的访问控制
         """
-
         print "Visiting : " + url
         webPage = WebPage(url)
         # 抓取页面内容
@@ -222,7 +168,7 @@ class TopicCrawler(object):
             log.error("抓取小组讨论列表时，发现网址格式错误。Group ID: %s, URL: %s" % (self.group_id, url))
             
         # if page reading fails
-        self.failedHref.add(url)
+        self.failed_href.add(url)
         return False
 
     def _addStickTopic(self, webPage):
@@ -235,7 +181,7 @@ class TopicCrawler(object):
         
         self.group_info = group
         
-        self.saveThread.putTask(self._save_group_handler, group)
+        self.save_thread.putTask(self._saveGroupHandler, group)
         
     def _addTopicLink(self, webPage, start):
         '''将页面中所有的topic链接放入对应的topic列表，并同时加入
@@ -255,15 +201,33 @@ class TopicCrawler(object):
             
         for topic in topic_list: 
             #print "Add group id:", self.group_id, "with topic link: ", href
-            self.topicList.append(topic)
+            self.topic_list.append(topic)
         # 存储已经抓取的topic list
-        self.saveThread.putTask(self._save_topic_handler, topic_list)
+        self.save_thread.putTask(self._saveTopicHandler, topic_list)
                 
         # 如果是首页，则需要添加所有的将来访问的页面
         if start == 0:
             print "Adding future visis for Group: " + self.group_id
             self._addFutureVisit(pageSource)
             
+    def _saveTopicHandler(self, topic_list):
+        """ 将每次从页面中抓取的topic id随时保存到文件中
+        """
+        for tid in topic_list:
+            self.topic_list_file.write(tid + '\n')
+        self.topic_list_file.flush()
+        os.fsync(self.topic_list_file)
+        
+    def _saveGroupHandler(self, group):
+        """ 保存group的基本信息，比如简介，创建日期等
+        `group` models.Group
+        """
+        #print 'In saving thread'
+        # 写入group的基本信息和置顶贴id
+        self.group_info_file.write(group.getSimpleString('[=]'))
+        self.group_info_file.flush()
+        os.fsync(self.group_info_file)
+
     def _addFutureVisit(self, pageSource):
         """ 访问讨论列表的首页，并添加所有的将来要访问的链接
         """
@@ -284,9 +248,9 @@ class TopicCrawler(object):
                 break
             url = "http://www.douban.com/group/" + self.group_id + "/discussion?start=" + str(i * 25)
             # 向线程池中添加任务：一次性添加
-            self.threadPool.putTask(self._taskHandler, url)
+            self.thread_pool.putTask(self._taskHandler, url)
             # 添加已经访问过的小组id
-            self.visitedHref.add(url)
+            self.visited_href.add(url)
 
     def _getAllHrefsFromPage(self, url, pageSource):
         '''解析html源码，获取页面所有链接。返回链接列表'''
@@ -308,9 +272,50 @@ class TopicCrawler(object):
             return True
         return False
         
+    def _getAlreadyVisitedNum(self):
+        #visitedGroups保存已经分配给taskQueue的链接，有可能链接还在处理中。
+        #因此真实的已访问链接数为visitedGroups数减去待访问的链接数
+        if len(self.visited_href) == 0:
+            return 0
+        else:
+            return len(self.visited_href) - self.thread_pool.getTaskLeft()
+            
+    def _saveTopicList(self):
+        """将抽取的结果存储在文件中
+        Note: 这次是将存储过程放在主线程，将会阻塞抓取过程
+        """
+        group_id = self.group_id
+        this_group = self.group_info
+        print "For group %s: number of Stick post: %d, number of regurlar post: %d, total topics is: %d." % \
+            (group_id, len(this_group.stick_topic_list), len(self.topic_list), len(this_group.stick_topic_list)+len(self.topic_list))
+            
+        # 将访问失败的网页存储起来
+        log.info('抓取失败的网页：')
+        for href in self.failed_href:
+            log.info(href)
+        
+        # 保存Group的本身的信息
+        f = open(group_info_path, "w")
+        f.write(this_group.__repr__())
+        f.close()
+        
+        # 存储Topic相关信息
+        f = open(topic_list_path, 'w')
+        for tid in this_group.stick_topic_list:
+            f.write(tid + "\n")
+            
+        f.write("\n")
+        for tid in self.topic_list:
+            f.write(tid + "\n")
+            
+        f.close()
+        
+        self.topic_list = list()
+        self.failed_href = set()
+        
 if __name__ == "__main__":
     stacktracer.trace_start("trace.html",interval=5,auto=True) # Set auto flag to always update file!
-    congifLogger("topicCrawler.log", 5)
+    congifLogger("log/topicCrawler.log", 5)
     
     group_id_list = []
     if len(sys.argv) <= 1:
@@ -325,7 +330,7 @@ if __name__ == "__main__":
     #tcrawler = TopicCrawler(['70612'], 5) # 我们都是学术女小组
     #tcrawler = TopicCrawler(['ustv'], 5) # 美剧fans 小组
     for group_id in group_id_list:
-        base_path = 'tables/' + group_id + '/'
+        base_path = 'data/' + group_id + '/'
         time_now = datetime.now()
         # 在group-info中只包含group信息和置顶贴的id，TopicList中包含普通topic list
         # 这么做的原因是：并不能保证两者写入的时间先后顺序
