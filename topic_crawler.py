@@ -336,7 +336,7 @@ if __name__ == "__main__":
         # 这么做的原因是：并不能保证两者写入的时间先后顺序
         group_info_path = base_path + group_id + '-info-' + str(time_now) + '.txt'
         topic_list_path = base_path + group_id + '-TopicList-' + str(time_now) + '.txt'
-        tcrawler = TopicCrawler(group_id, 5, group_info_path, topic_list_path, float('inf'))
+        tcrawler = TopicCrawler(group_id, 5, group_info_path, topic_list_path, 20)
         tcrawler.start()
     
     stacktracer.trace_stop()
