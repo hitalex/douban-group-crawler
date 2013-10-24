@@ -29,12 +29,18 @@ log = logging.getLogger('Main.models')
 class Comment(object):
     """评论的类
     """
-    def __init__(self, cid, user_id, pubdate, content, quote, topic_id, group_id):
+    def __init__(self, cid, user_id, pubdate, content, has_quote, quote, quote_content_all, \
+            quote_user_id, topic_id, group_id):
         self.cid = cid              # 评论id
         self.user_id = user_id      # 发评论的人的id
         self.pubdate = pubdate      # 发布时间
         self.content = content      # 评论内容，不包括引用评论的内容
+        
+        self.has_quote = has_quote      # 是否拥有quote
         self.quote = quote          # 引用他人评论, Comment 类
+        # 以下两个为临时存储变量，在找到quote comment之后便会删除
+        self.quote_content_all = quote_content_all
+        self.quote_user_id = quote_user_id
         
         self.topic_id = topic_id    # 所在topic的id
         self.group_id = group_id    # 所在小组的id
@@ -122,6 +128,8 @@ class Topic(object):
         s += (self.user_id + delimiter)
         s += (self.title + delimiter)
         s += (str(self.pubdate) + delimiter)
+        s += (str(len(self.comment_list)) + delimiter) # number of comments
+        # 以后可能还需要记录推荐数和喜欢数等
         s += self.content
         
         return s
@@ -230,7 +238,7 @@ class Topic(object):
             self.lock.release()
             
         # 在添加评论后对评论按照日期排序
-        sorted(self.comment_list, key=operator.attrgetter('pubdate'), reverse = True)
+        #sorted(self.comment_list, key=operator.attrgetter('pubdate'), reverse = True)
 
         # 添加已经抓取的page index
         self.parsedPageIndexSet.add(1)
@@ -241,6 +249,7 @@ class Topic(object):
         # 从comment节点中抽取出Comment结构，并返回Comment对象
         #pdb.set_trace()
         cid = cli.attrib['data-cid']
+        
         nodea = cli.xpath("div[@class='reply-doc content']/div[@class='bg-img-green']/h4/a")[0]
         #  如果是已注销的用于，则user_name = '[已注销]'
         user_name = nodea.text
@@ -254,22 +263,20 @@ class Topic(object):
         # 判断是否有引用其他回复
         quote_id = ""
         quote_node = cli.xpath("div[@class='reply-doc content']/div[@class='reply-quote']")
-        quote_comment = None
+        has_quote = False
+        quote_content_all = None
+        quote_user_id = None
         if (quote_node is not None) and (len(quote_node) > 0):
             quote_content_node = quote_node[0].xpath("span[@class='all']")[0]
             quote_content_all = quote_content_node.text.strip()
             url_node = quote_node[0].xpath("span[@class='pubdate']/a")[0]
             url = url_node.attrib['href']
             quote_user_id = self.extractUserID(url)
-            # 找到引用的回复的comment
-            quote_comment = self.findPreviousComment(quote_content_all, quote_user_id)
-            if quote_comment is None:
-                log.error('Quote comment not found for comment: %s in topic: %s, \
-                    in group: \%s' % (cid, self.topic_id, self.group_id))
-                log.error('Quote content: %s' % quote_content_all)
-                log.error('Comment content: %s\n\n' % content)
+            has_quote = True
                 
-        comment = Comment(cid, user_id, pubdate, content, quote_comment, self.topic_id, self.group_id)
+        # 这里暂不设置comment所引用的quote，而是只是设立标志位has_quote, 具体quote在抓取完topic之后再确定
+        comment = Comment(cid, user_id, pubdate, content, has_quote, None, \
+            quote_content_all, quote_user_id, self.topic_id, self.group_id)
         #print "Comment content: ", comment.content
         return comment
         
@@ -280,18 +287,6 @@ class Topic(object):
             pdb.set_trace()
         return match_obj.group(1)
         
-    def findPreviousComment(self, content, user_id):
-        # 根据引用的内容和user id，找到引用的评论的链接
-        # 比较内容时，不考虑其中的换行符
-        import re
-        content = re.sub(r'\s', '', content) # remove any white spaces
-        for comment in self.comment_list:
-            tmp = re.sub(r'\s', '', comment.content)
-            if content == tmp and user_id == comment.user_id:
-                return comment
-                
-        # not found, but should be found
-        return None
     def extractNonfirstPage(self, webPage):
         # 抽取topic非首页的内容
         # 如果第一页的评论数不足100，则不可能有第二页评论
@@ -313,7 +308,7 @@ class Topic(object):
             self.lock.release()
         
         # 对评论进行排序
-        sorted(self.comment_list, key=operator.attrgetter('pubdate'), reverse = True)
+        #sorted(self.comment_list, key=operator.attrgetter('pubdate'), reverse = True)
         
         match_obj = REComment.match(url)
         start = int(match_obj.group(2))
@@ -322,6 +317,45 @@ class Topic(object):
             
         self.parsedPageIndexSet.add(start / 100 + 1)
         return newly_added
+        
+    def findPreviousComment(self, end_index, content, user_id):
+        # 根据引用的内容和user id，找到引用的评论的链接
+        # 比较内容时，不考虑其中的换行符
+        import re
+        content = re.sub(r'\s', '', content) # remove any white spaces
+        for i in range(end_index):
+            comment = self.comment_list[i]
+            tmp = re.sub(r'\s', '', comment.content)
+            if content == tmp and user_id == comment.user_id:
+                return comment
+                
+        # not found, but should be found
+        return None
+        
+    def sortComment(self):
+        """ 在完成对该topic的基本信息和所有comment的抽取后，对comment按照时间排序，
+        如果某条comment引用之前的评论，则需要设置引用的comment id
+        """
+        # 对评论进行排序，按照发表时间
+        sorted(self.comment_list, key=operator.attrgetter('pubdate'), reverse = True)
+        
+        comment_count = len(self.comment_list)
+        for i in range(comment_count):
+            comment = self.comment_list[i]
+            if comment.has_quote:
+                # 找到引用的回复的comment
+                quote_comment = self.findPreviousComment(i, comment.quote_content_all, comment.quote_user_id)
+                #释放资源
+                comment.quote_content_all = None
+                comment.quote_user_id = None
+                if quote_comment is None:
+                    log.error('Quote comment not found for comment: %s in topic: %s, \
+                        in group: \%s' % (cid, self.topic_id, self.group_id))
+                    log.error('Quote content: %s' % quote_content_all)
+                    log.error('Comment content: %s\n\n' % content)
+                else:
+                    # 链接找到的comment
+                    comment.quote = quote_comment
         
 class Group(object):
     """小组类

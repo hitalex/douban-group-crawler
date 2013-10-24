@@ -209,6 +209,8 @@ class CommentCrawler(object):
             # 判断抓取是否结束，如果结束，则释放dict内存
             # 这个很重要，因为随着topic数量增多，内存会占很多
             if topic.isComplete():
+                # 对评论进行排序，并查找quote comment
+                self.topic_dict[topic_id].sortComment()
                 self.save_thread.putTask(self._saveTopicHandler, self.topic_dict, topic_id)
                 #self.topic_dict[topic_id] = None        # 释放资源
                 self.finished.add(topic_id)
@@ -262,16 +264,14 @@ class CommentCrawler(object):
         @topic_id 需要存储的topic id
         """
         topic = topic_dict[topic_id]
-        topic_path = self.base_path + group_id + '/' + topic_id + '-content.txt'
-        comment_path = self.base_path + group_id + '/' + topic_id + '-comment.txt'
+        topic_path = self.base_path + group_id + '/' + topic_id + '-info.txt'
         # 存储topic本身的信息
         f = codecs.open(topic_path, 'w', 'utf-8')
         s = topic.getSimpleString('[=]')
         f.write(s)
-        f.close()
+        f.write('[*ROWEND*]')
         
-        # 存储comment信息
-        f = codecs.open(comment_path, 'w', 'utf-8')
+        # 存储comment信息,存储到相同的文件中
         for comment in topic.comment_list:
             s = comment.getSimpleString('[=]')
             f.write(s + '\n[*ROWEND*]\n')
@@ -334,7 +334,8 @@ class CommentCrawler(object):
             return 0
         else:
             return len(self.visited_href) - self.thread_pool.getTaskLeft()
-
+    
+    '''
     def _saveCommentList(self):
         """将抽取的结果存储在文件中，包括存储topic内容和评论内容
         Note: 这次是将存储过程放在主线程，将会阻塞抓取过程
@@ -389,6 +390,7 @@ class CommentCrawler(object):
                 
         ftopic.close()
         fcomment.close()
+     '''
         
 if __name__ == "__main__":
     LINE_FEED = "\n" # 采用windows的换行格式
@@ -430,7 +432,7 @@ if __name__ == "__main__":
         comment_crawler.start()
     """
     # 抓取insidestory
-    f = open('data/' + group_id + '/TopicList-'+group_id, 'r')
+    f = open('data/' + group_id + '/' + group_id + '-TopicList.txt', 'r')
     topic_list = []
     for line in f:
         line = line.strip()
