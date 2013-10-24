@@ -18,15 +18,15 @@ def is_between(now, start_date, end_date):
     else:
         return False
         
-def load_uid(file_path):
-    """ 从文件内导入所有的用户id，返回uid的list
+def load_id_list(file_path):
+    """ 从文件内导入所有的id，每行一个，返回这些id的list
     """
     f = open(file_path, 'r')
-    uid_list = []
+    id_list = []
     for line in f:
         line = line.strip()
         if line != '':
-            uid_list.append(line)
+            id_list.append(line)
     f.close()
     
-    return uid_list
+    return id_list
