@@ -239,16 +239,19 @@ class CommentCrawler(object):
     def _saveHandler(self, comment_list, topic):
         """ 将topic信息和comemnt信息保存到文件中
         注意：这里将topic信息和comment信息分开存储
+        注意：这里每一行存储一个topic或者comment，不再使用ROWEND符号作为结束
         """
         # 先保存comment_list id
         # 判断是否是第一次保存该topic
         if topic != None: # 如果是第一次保存，则需要保存topic的基本信息
             s = topic.getSimpleString('[=]')
-            self.topic_info_file.write(s + '\n[*ROWEND*]\n')
+            #self.topic_info_file.write(s + '\n[*ROWEND*]\n')
+            self.topic_info_file.write(s + '\n')
         # 保存comment信息
         for comment in comment_list:
             s = comment.getSimpleString('[=]')
-            self.comment_info_file.write(s + '\n[*ROWEND*]\n')
+            #self.comment_info_file.write(s + '\n[*ROWEND*]\n')
+            self.comment_info_file.write(s + '\n')
             
         # 保证已经写入到磁盘上，这样可以随时终止
         self.topic_info_file.flush()
@@ -268,13 +271,14 @@ class CommentCrawler(object):
         # 存储topic本身的信息
         f = codecs.open(topic_path, 'w', 'utf-8')
         s = topic.getSimpleString('[=]')
-        f.write(s)
-        f.write('[*ROWEND*]')
+        f.write(s + '\n')
+        #f.write('[*ROWEND*]')
         
         # 存储comment信息,存储到相同的文件中
         for comment in topic.comment_list:
             s = comment.getSimpleString('[=]')
-            f.write(s + '\n[*ROWEND*]\n')
+            #f.write(s + '\n[*ROWEND*]\n')
+            f.write(s + '\n')
         f.close()
         
         self.topic_dict[topic_id] = None        # 释放资源
