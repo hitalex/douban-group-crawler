@@ -71,7 +71,12 @@ class Comment(object):
             s += delimiter
         else:
             s += (self.quote.cid + delimiter)
-        s += (self.content) # 直接返回已经中文分词的结果
+            
+        # self.content中的换行符去掉
+        self.content = self.content.replace('\r\n', ' ')
+        self.content = self.content.replace('\n', ' ')
+        
+        s += (self.content)
         
         return s
         
@@ -130,6 +135,11 @@ class Topic(object):
         s += (str(self.pubdate) + delimiter)
         s += (str(len(self.comment_list)) + delimiter) # number of comments
         # 以后可能还需要记录推荐数和喜欢数等
+        
+        # self.content中的换行符去掉
+        self.content = self.content.replace('\r', '')
+        self.content = self.content.replace('\n', ' ')
+        
         s += self.content
         
         return s
@@ -396,6 +406,11 @@ class Group(object):
         s += (self.group_id + delimiter)
         s += (self.admin + delimiter)
         s += (str(self.pubdate) + delimiter)
+        
+        # self.content中的换行符去掉
+        self.desc = self.desc.replace('\r', '')
+        self.desc = self.desc.replace('\n', ' ')
+        
         s += (self.desc + delimiter)
         s += ','.join(self.stick_topic_list)
         
