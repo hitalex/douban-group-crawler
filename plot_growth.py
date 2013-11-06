@@ -4,7 +4,7 @@
 从已经抓取的topic中找到那些较为popular的帖子，将其评论数(看作时间序列)增长趋势画出来
 """
 import codecs
-from datetime import datetime
+from datetime import datetime, timedelta
 import math
 
 from matplotlib.dates import date2num
@@ -13,7 +13,7 @@ import pandas as pd
 
 from utils import load_id_list
 
-threshold = 200 # 考虑的最少评论数
+threshold = 300 # 考虑的最少评论数
 
 def plot_popularity(date_list):
     """ 根据评论的时间列表画出增长示意图
@@ -39,13 +39,19 @@ def plot_granularity_popularity(date_list, freq = 'D'):
     """
     start = date_list[0]
     end = date_list[-1]
+    
+    delta = timedelta(days=30*6) # 构造一个时间差为半年的timedelta对象
+    if end > start + delta:
+        end = start + delta # 只考虑半年内的评论
     # create a time series with specified freq
-    ts = pd.Series(1, pd.date_range(start, end, freq = freq))
+    ts = pd.Series(0, pd.date_range(start, end, freq = freq))
     index = 0
     
     for date in date_list:
-        if date >= ts.index[index]:
+        if date > ts.index[index]:
             index = index + 1
+            if index >= len(ts):
+                break
 
         ts[index] = ts[index] + 1
         
@@ -54,20 +60,22 @@ def plot_granularity_popularity(date_list, freq = 'D'):
     cum_count = ts.cumsum()
     
     for i in range(len(ts)):
-        ts[i] = math.log(ts[i])
+        ts[i] = math.log(ts[i] + 1)
         cum_count[i] = math.log(cum_count[i])
         
     plt.figure()
-    plt.plot(ts, color='blue', hold=True, ls=':')
-    plt.plot(cum_count, color='red', ls='--')
+    #plt.plot(ts, color='blue', hold=True, ls=':')
+    #plt.plot(cum_count, color='red', ls='--')
+    ts.plot(color='blue', ls='-')
+    cum_count.plot(color='red', ls='--')
     
     plt.show()
 
 def main(group_id):
     # 读取topic id list
     path = 'data/' + group_id + '/' + group_id + '-TopicList.txt'
-    #topic_id_list = load_id_list(path)
-    topic_id_list = ['36380374']
+    topic_id_list = load_id_list(path)
+    #topic_id_list = ['34029324']
     
     for topic_id in topic_id_list:
         path = 'data/' + group_id + '/' + topic_id + '-content.txt'
@@ -105,7 +113,7 @@ def main(group_id):
         print 'Number of comments: %d\n' % (count-1)
         
         #plot_popularity(date_list)
-        plot_granularity_popularity(date_list, freq = 'H')
+        plot_granularity_popularity(date_list, freq = 'D')
 
 if __name__ == '__main__':
     import sys
