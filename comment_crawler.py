@@ -240,6 +240,7 @@ class CommentCrawler(object):
         """ 将topic信息和comemnt信息保存到文件中
         注意：这里将topic信息和comment信息分开存储
         注意：这里每一行存储一个topic或者comment，不再使用ROWEND符号作为结束
+        Note: 使用此方式保存comment quote会产生错误。
         """
         # 先保存comment_list id
         # 判断是否是第一次保存该topic
@@ -436,7 +437,7 @@ if __name__ == "__main__":
         comment_crawler.start()
     """
     # 抓取insidestory
-    f = open('data/' + group_id + '/' + group_id + '-TopicList.txt', 'r')
+    f = open('data/' + group_id + '/TopicList-' + group_id + '.txt', 'r')
     topic_list = []
     for line in f:
         line = line.strip()
@@ -445,8 +446,8 @@ if __name__ == "__main__":
     f.close()
     
     #time_now = datetime.now()
-    topic_path = 'data/' + group_id + '/TopicInfo-' + group_id + '-raw-all'
-    comment_path = 'data/' + group_id + '/CommentInfo-' + group_id + '-raw-all'
+    topic_path = 'data/' + group_id + '/TopicInfo-' + group_id + '-raw-all.txt'
+    comment_path = 'data/' + group_id + '/CommentInfo-' + group_id + '-raw-all.txt'
     comment_crawler = CommentCrawler(group_id, topic_list, 5, topic_path, comment_path)
     comment_crawler.start()
     

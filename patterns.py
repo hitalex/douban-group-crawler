@@ -5,7 +5,7 @@
 import re
 
 # 用户的主页链接, group(1)为用户id
-REPeople = re.compile("^http://www.douban.com/people/([0-9, a-z, A-Z, _, \-, \.]+)/$")
+REPeople = re.compile("^http://www.douban.com/group/people/([0-9, a-z, A-Z, _, \-, \.]+)/$")
 
 # 小组首页链接, group(1)为小组id
 REGroup = re.compile("^http://www.douban.com/group/([0-9, a-z, A-Z, _, \-, \.]+)/$")

@@ -67,13 +67,14 @@ class Comment(object):
         s += (self.topic_id + delimiter)
         s += (self.user_id + delimiter)
         s += (str(self.pubdate) + delimiter)
+
         if self.quote is None:
             s += delimiter
         else:
             s += (self.quote.cid + delimiter)
             
         # self.content中的换行符去掉
-        self.content = self.content.replace('\r\n', ' ')
+        self.content = self.content.replace('\r', ' ')
         self.content = self.content.replace('\n', ' ')
         
         s += (self.content)
@@ -137,7 +138,7 @@ class Topic(object):
         # 以后可能还需要记录推荐数和喜欢数等
         
         # self.content中的换行符去掉
-        self.content = self.content.replace('\r', '')
+        self.content = self.content.replace('\r', ' ')
         self.content = self.content.replace('\n', ' ')
         
         s += self.content
@@ -203,10 +204,11 @@ class Topic(object):
         lz = page.xpath(u"//div[@class='topic-doc']/h3/span[@class='from']/a")[0]
         self.user_name = lz.text.strip()
         url = lz.attrib['href']
-        #print url
+        print url
         match_obj = REPeople.match(url)
         assert(match_obj is not None)
         self.user_id = match_obj.group(1)
+        
         timenode = content.xpath(u"//div[@class='topic-doc']/h3/span[@class='color-green']")[0]
         self.pubdate = datetime.strptime(timenode.text, "%Y-%m-%d %H:%M:%S")
         
@@ -353,6 +355,7 @@ class Topic(object):
         for i in range(comment_count):
             comment = self.comment_list[i]
             if comment.has_quote:
+                #print 'Has quote: ', comment.cid
                 # 找到引用的回复的comment
                 quote_comment = self.findPreviousComment(i, comment.quote_content_all, comment.quote_user_id)
                 #释放资源
