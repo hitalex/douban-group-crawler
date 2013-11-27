@@ -32,7 +32,7 @@ log = logging.getLogger('Main.CommentCrawler')
 
 class CommentCrawler(object):
     
-    def __init__(self, group_id, topic_id_list, thread_num, topic_info_path, comment_info_path):
+    def __init__(self, group_id, topic_id_list, thread_num, base_path, topic_info_path, comment_info_path):
         """
         `group_id` 当前的Group id
         `topic_id_list` 需要抓取的topic id的list
@@ -44,12 +44,12 @@ class CommentCrawler(object):
         #线程池,指定线程数
         self.thread_pool = ThreadPool(thread_num)
 
-        # 保证同时只有一个线程在写文件
-        self.save_thread = ThreadPool(1)
+        # 由于现在是将不同的topic信息保存到不同的文件中，所以可以同时存储
+        self.save_thread = ThreadPool(10)
         
         self.topic_info_path = topic_info_path
         self.comment_info_path = comment_info_path
-        self.base_path = 'data/'
+        self.base_path = base_path
         
         # 已经访问的页面: Group id ==> True or False
         self.visited_href = set()
@@ -181,8 +181,8 @@ class CommentCrawler(object):
                 topic = Topic(topic_id, self.group_id)
                 comment_list = topic.parse(webPage, isFirstPage = True) # First page parsing
                 self.topic_dict[topic_id] = topic
-                # 保存到文件
-                self.save_thread.putTask(self._saveHandler, comment_list, topic = topic)
+                # 保存到单个文件（已废弃不用）
+                #self.save_thread.putTask(self._saveHandler, comment_list, topic = topic)
             elif match_obj2 is not None:
                 topic_id = match_obj2.group(1)
                 start = int(match_obj2.group(2))
@@ -201,8 +201,8 @@ class CommentCrawler(object):
                     return False
                     
                 comment_list = topic.parse(webPage, isFirstPage = False) # non-firstpage parsing
-                # 保存到文件
-                self.save_thread.putTask(self._saveHandler, comment_list, topic = None)
+                # 保存到单个文件（已废弃不用）
+                #self.save_thread.putTask(self._saveHandler, comment_list, topic = None)
             else:
                 #pdb.set_trace()
                 log.info('Topic链接格式错误：%s in Group: %s.' % (url, self.group_id))
@@ -235,31 +235,6 @@ class CommentCrawler(object):
             self.finished.add(topic_id) # 有可能已经记录了一些某些topic的信息
             self.visited_href.add(url)
             return False
-
-    def _saveHandler(self, comment_list, topic):
-        """ 将topic信息和comemnt信息保存到文件中
-        注意：这里将topic信息和comment信息分开存储
-        注意：这里每一行存储一个topic或者comment，不再使用ROWEND符号作为结束
-        Note: 使用此方式保存comment quote会产生错误。
-        """
-        # 先保存comment_list id
-        # 判断是否是第一次保存该topic
-        if topic != None: # 如果是第一次保存，则需要保存topic的基本信息
-            s = topic.getSimpleString('[=]')
-            #self.topic_info_file.write(s + '\n[*ROWEND*]\n')
-            self.topic_info_file.write(s + '\n')
-        # 保存comment信息
-        for comment in comment_list:
-            s = comment.getSimpleString('[=]')
-            #self.comment_info_file.write(s + '\n[*ROWEND*]\n')
-            self.comment_info_file.write(s + '\n')
-            
-        # 保证已经写入到磁盘上，这样可以随时终止
-        self.topic_info_file.flush()
-        os.fsync(self.topic_info_file) # The method fsync() forces write of file with file descriptor fd to disk
-        
-        self.comment_info_file.flush()
-        os.fsync(self.comment_info_file)
         
     def _saveTopicHandler(self, topic_dict, topic_id):
         """ 存储抓取完毕的帖子信息以及其对应的Comment。
@@ -341,6 +316,30 @@ class CommentCrawler(object):
             return len(self.visited_href) - self.thread_pool.getTaskLeft()
     
     '''
+    def _saveHandler(self, comment_list, topic):
+        """ 将topic信息和comemnt信息保存到文件中
+        注意：这里将topic信息和comment信息分开存储
+        注意：这里每一行存储一个topic或者comment，不再使用ROWEND符号作为结束
+        Note: 使用此方式保存comment quote会产生错误。
+        """
+        # 先保存comment_list id
+        # 判断是否是第一次保存该topic
+        if topic != None: # 如果是第一次保存，则需要保存topic的基本信息
+            s = topic.getSimpleString('[=]')
+            #self.topic_info_file.write(s + '\n[*ROWEND*]\n')
+            self.topic_info_file.write(s + '\n')
+        # 保存comment信息
+        for comment in comment_list:
+            s = comment.getSimpleString('[=]')
+            #self.comment_info_file.write(s + '\n[*ROWEND*]\n')
+            self.comment_info_file.write(s + '\n')
+            
+        # 保证已经写入到磁盘上，这样可以随时终止
+        self.topic_info_file.flush()
+        os.fsync(self.topic_info_file) # The method fsync() forces write of file with file descriptor fd to disk
+        
+        self.comment_info_file.flush()
+        os.fsync(self.comment_info_file)
     def _saveCommentList(self):
         """将抽取的结果存储在文件中，包括存储topic内容和评论内容
         Note: 这次是将存储过程放在主线程，将会阻塞抓取过程
@@ -436,8 +435,9 @@ if __name__ == "__main__":
         comment_crawler = CommentCrawler(group_id, topic_list, 5, topic_path, comment_path)
         comment_crawler.start()
     """
+    base_path = '/home/kqc/dataset/douban-group/'
     # 抓取insidestory
-    f = open('data/' + group_id + '/TopicList-' + group_id + '.txt', 'r')
+    f = open(base_path +  'TopicList-' + group_id + '.txt', 'r')
     topic_list = []
     for line in f:
         line = line.strip()
@@ -446,9 +446,10 @@ if __name__ == "__main__":
     f.close()
     
     #time_now = datetime.now()
-    topic_path = 'data/' + group_id + '/TopicInfo-' + group_id + '-raw-all.txt'
-    comment_path = 'data/' + group_id + '/CommentInfo-' + group_id + '-raw-all.txt'
-    comment_crawler = CommentCrawler(group_id, topic_list, 5, topic_path, comment_path)
+    topic_path = '/home/kqc/dataset/douban-group/' + group_id + '/TopicInfo-' + group_id + '-raw-all.txt'
+    comment_path = '/home/kqc/dataset/douban-group/' + group_id + '/CommentInfo-' + group_id + '-raw-all.txt'
+    
+    comment_crawler = CommentCrawler(group_id, topic_list, 5, base_path, topic_path, comment_path)
     comment_crawler.start()
     
     print "Done"

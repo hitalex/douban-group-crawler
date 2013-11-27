@@ -330,13 +330,13 @@ if __name__ == "__main__":
     #tcrawler = TopicCrawler(['70612'], 5) # 我们都是学术女小组
     #tcrawler = TopicCrawler(['ustv'], 5) # 美剧fans 小组
     for group_id in group_id_list:
-        base_path = 'data/' + group_id + '/'
+        base_path = '/home/kqc/dataset/douban-group/'
         time_now = datetime.now()
         # 在group-info中只包含group信息和置顶贴的id，TopicList中包含普通topic list
         # 这么做的原因是：并不能保证两者写入的时间先后顺序
-        group_info_path = base_path + group_id + '-info-' + str(time_now) + '.txt'
-        topic_list_path = base_path + group_id + '-TopicList-' + str(time_now) + '.txt'
-        tcrawler = TopicCrawler(group_id, 5, group_info_path, topic_list_path, 20)
+        group_info_path = base_path + 'Info-' + group_id + '-' +str(time_now) + '.txt'
+        topic_list_path = base_path + 'TopicList-' + group_id + '-' + str(time_now) + '.txt'
+        tcrawler = TopicCrawler(group_id, 5, group_info_path, topic_list_path, 10000)
         tcrawler.start()
     
     stacktracer.trace_stop()

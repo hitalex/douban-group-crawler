@@ -357,18 +357,18 @@ class Topic(object):
             if comment.has_quote:
                 #print 'Has quote: ', comment.cid
                 # 找到引用的回复的comment
-                quote_comment = self.findPreviousComment(i, comment.quote_content_all, comment.quote_user_id)
-                #释放资源
-                comment.quote_content_all = None
-                comment.quote_user_id = None
+                quote_comment = self.findPreviousComment(i, comment.quote_content_all, comment.quote_user_id)                
                 if quote_comment is None:
                     log.error('Quote comment not found for comment: %s in topic: %s, \
-                        in group: \%s' % (cid, self.topic_id, self.group_id))
-                    log.error('Quote content: %s' % quote_content_all)
-                    log.error('Comment content: %s\n\n' % content)
+                        in group: \%s' % (comment.cid, self.topic_id, self.group_id))
+                    log.error('Quote content: %s' % comment.quote_content_all)
+                    log.error('Comment content: %s\n\n' % comment.content)
                 else:
                     # 链接找到的comment
                     comment.quote = quote_comment
+                #释放资源
+                comment.quote_content_all = None
+                comment.quote_user_id = None
         
 class Group(object):
     """小组类
