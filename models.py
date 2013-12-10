@@ -132,9 +132,17 @@ class Topic(object):
         s += (self.topic_id + delimiter)
         s += (self.group_id + delimiter)
         s += (self.user_id + delimiter)
+        # 将title中的换行符去掉
+        self.title = self.title.replace('\r', ' ')
+        self.title = self.title.replace('\n', ' ')
         s += (self.title + delimiter)
+        
         s += (str(self.pubdate) + delimiter)
         s += (str(len(self.comment_list)) + delimiter) # number of comments
+        # 记录最后一个comment的时间
+        #last_comment = self.comment_list[-1]
+        #s += (str(last_comment.pubdate) + delimiter)
+        
         # 以后可能还需要记录推荐数和喜欢数等
         
         # self.content中的换行符去掉
