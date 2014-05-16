@@ -356,8 +356,8 @@ class Topic(object):
         """ 在完成对该topic的基本信息和所有comment的抽取后，对comment按照时间排序，
         如果某条comment引用之前的评论，则需要设置引用的comment id
         """
-        # 对评论进行排序，按照发表时间
-        sorted(self.comment_list, key=operator.attrgetter('pubdate'), reverse = True)
+        # 对评论进行排序，按照发表时间从小到大
+        self.comment_list = sorted(self.comment_list, key=operator.attrgetter('pubdate'), reverse = False)    
         
         comment_count = len(self.comment_list)
         for i in range(comment_count):
