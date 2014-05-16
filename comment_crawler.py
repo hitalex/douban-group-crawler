@@ -209,8 +209,6 @@ class CommentCrawler(object):
             # 判断抓取是否结束，如果结束，则释放dict内存
             # 这个很重要，因为随着topic数量增多，内存会占很多
             if topic.isComplete():
-                # 对评论进行排序，并查找quote comment
-                self.topic_dict[topic_id].sortComment()
                 self.save_thread.putTask(self._saveTopicHandler, self.topic_dict, topic_id)
                 #self.topic_dict[topic_id] = None        # 释放资源
                 self.finished.add(topic_id)
@@ -242,7 +240,10 @@ class CommentCrawler(object):
         @topic_dict 存储topic信息的字典
         @topic_id 需要存储的topic id
         """
+        # 对评论进行排序，并查找quote comment
         topic = topic_dict[topic_id]
+        topic.sortComment()
+        
         topic_path = self.base_path + group_id + '/' + topic_id + '-info.txt'
         # 存储topic本身的信息
         f = codecs.open(topic_path, 'w', 'utf-8')
